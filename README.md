@@ -1,70 +1,94 @@
 # GNN-TAMP
 
-Graph Neural Network for Task and Motion Planning.
+Graph Neural Network for Task and Motion Planning - Automated structure building with blocks.
 
-## Overview
+## Task
 
-Uses a GNN to predict object placement order, then executes plans using KOMO motion planning.
+Automate the construction of block structures (towers, pyramids, stacks) using a robot arm. Given a target configuration, the system determines the correct placement sequence and executes the motions.
+
+## Approach
+
+**High-level planning**: Graph convolutions learn spatial relationships between blocks and predict optimal placement order.
+
+**Low-level execution**: KOMO (K-Order Markov Optimization) generates feasible robot trajectories for each placement.
+
+The system replans incrementally after each block is placed, adapting to the current state.
+
+## Architecture
+
+```
+Target Scene → Graph Representation → GNN Predictions → Placement Order → 
+KOMO Motion Planning → Robot Execution → State Update → Replan → Repeat
+```
 
 ## Structure
 
 ```
 GNN-TAMP/
 ├── main.py              # Main execution script
-├── model.py             # GNN model definitions
-├── graph_processor.py    # Graph parsing and conversion
-├── planner.py           # Planning logic
-├── motion_planner.py    # KOMO motion planning
-├── generate_dataset.py  # Dataset generation
-├── trained_model.pth    # Pre-trained model weights
+├── model.py             # GNN model (CustomEdgeConv + GNNModel)
+├── graph_processor.py  # Parse .g files, convert to graphs
+├── planner.py           # Generate placement sequences
+├── motion_planner.py    # KOMO trajectory optimization
+├── generate_dataset.py  # Generate training data
+├── trained_model.pth    # Pre-trained GNN weights
 ├── robot_free.g         # Robot configuration
-└── target/              # Target scene files (.g format)
+└── target/              # Target structure files (.g format)
 ```
 
 ## Dependencies
 
 - PyTorch
 - torch-geometric
-- robotic (rai)
+- robotic (rai) - for KOMO
 - NetworkX
 - NumPy
 
 ## Usage
 
-### Generate Dataset
+### Generate Training Data
 
 ```bash
 python generate_dataset.py
 ```
 
-Generates training data in `dataset/` directory with multiple stacking patterns.
+Creates diverse stacking patterns: random stacks, pyramids, and predefined patterns.
 
-### Run Planning
+### Run Planning and Execution
 
 ```bash
 python main.py
 ```
 
-Places target configuration files in `target/` directory. The script will:
-1. Load the trained model
-2. Generate a placement order
-3. Execute motions using KOMO
-4. Replan incrementally after each placement
+1. Loads trained GNN model
+2. Processes target scene from `target/`
+3. Predicts placement order via graph convolutions
+4. For each block:
+   - Plans motion trajectory with KOMO
+   - Executes placement
+   - Updates scene state
+   - Replans remaining sequence
+
+## Graph Representation
+
+- **Nodes**: Blocks/objects
+- **Edges**: Spatial relationships with relative positions
+- **Edge direction**: Upward connections (z > 0)
+
+The GNN uses custom edge convolution incorporating:
+- Node features
+- Relative positions (edge attributes)
+- Directional vectors (target - source)
+
+Output: Probability scores indicating which block to place next.
 
 ## File Format
 
-Scene files use `.g` format:
+Scene files (`.g` format):
 ```
 object1: { X: [x, y, z, ...], shape: ssBox, size: [0.8, 0.8, 0.8, .01], color: [0.5, 0.5, 0.5]}
 object2(object1): { Q: "t(dx dy dz) d(angle 0 0 1)", shape: ssBox, ...}
 ```
 
-## Model
-
-GNN with custom edge convolution that uses:
-- Node features
-- Relative positions (edge weights)
-- Directional information
-
-Outputs probability scores for next object to place.
+First line defines base object position. Subsequent lines define objects relative to parents.
 
