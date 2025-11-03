@@ -1,6 +1,6 @@
 # GNN-TAMP
 
-Graph Neural Network for Task and Motion Planning - Automated structure building with blocks.
+Graph Neural Network for Task and Motion Planning for automated structure building with blocks.
 
 ## Task
 
