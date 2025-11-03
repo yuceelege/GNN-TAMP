@@ -1,20 +1,35 @@
+"""
+Graph Neural Network model for task planning.
+"""
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch.nn import Sequential as Seq, Linear, ReLU, BatchNorm1d
-from torch_geometric.data import *
+from torch_geometric.data import DataLoader
+
 
 class CustomEdgeConv(MessagePassing):
+    """Custom edge convolution layer for graph neural networks."""
+    
     def __init__(self, in_channels, out_channels):
         super().__init__(aggr='max')
-        self.mlp = Seq(Linear(2 * in_channels + 3, out_channels), ReLU(), Linear(out_channels, out_channels))
+        self.mlp = Seq(
+            Linear(2 * in_channels + 3, out_channels),
+            ReLU(),
+            Linear(out_channels, out_channels)
+        )
+    
     def forward(self, x, edge_index, edge_weight):
         return self.propagate(edge_index, x=x, edge_weight=edge_weight)
+    
     def message(self, x_i, x_j, edge_weight):
         tmp = torch.cat([x_i, x_j - x_i, edge_weight.view(-1, 3)], dim=1)
         return self.mlp(tmp)
 
+
 class GNNModel(torch.nn.Module):
+    """Graph Neural Network model for predicting object placement order."""
+    
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GNNModel, self).__init__()
         self.conv1 = CustomEdgeConv(in_channels, hidden_channels)
@@ -26,14 +41,18 @@ class GNNModel(torch.nn.Module):
         x = self.conv1(x, edge_index, edge_attr)
         x = F.sigmoid(self.out(x))
         return x
-    
+
+
 def online_train(model, lr, new_graph_data, batch_size=1):
+    """Online training function for fine-tuning the model."""
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = torch.nn.MSELoss()
     model.train()
+    
     for graph in DataLoader(new_graph_data, batch_size=batch_size):
         out = model(graph)
         loss = criterion(out, graph.y.view(-1, 1))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+

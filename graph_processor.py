@@ -1,17 +1,23 @@
+"""
+Graph processing utilities for parsing and converting scene graphs.
+"""
 import re
 import numpy as np
 import networkx as nx
 import os
-
 import torch
 from torch_geometric.data import Data
 
+
 def read_g_file(filename):
+    """Read content from a .g file."""
     with open(filename, 'r') as file:
         content = file.read()
     return content
 
+
 def get_relative_position(G, start_node, end_node):
+    """Get relative position between two nodes in a graph."""
     try:
         edge_data = G.get_edge_data(start_node, end_node)
         if edge_data is not None:
@@ -24,18 +30,23 @@ def get_relative_position(G, start_node, end_node):
         print("One or both of the nodes do not exist in the graph.")
         return None
 
+
 def parse_transform(transform_string):
+    """Parse transformation string and extract translation vector."""
     translation_match = re.search(r't\((.*?)\)', transform_string)
     if translation_match:
         translation_values = translation_match.group(1)
         return np.array([float(val) for val in translation_values.split()])
     return np.zeros(3)
 
+
 # Precompile regular expressions
 position_pattern = re.compile(r'object(\d+).*?X:\s*\[([^\]]+)\]')
 transform_pattern = re.compile(r'object(\d+)\(object(\d+)\).*?Q:\s*"([^"]+)"')
 
+
 def process_g_file(filepath):
+    """Process a single .g file and convert it to a graph representation."""
     g_content = read_g_file(filepath)
 
     object_positions = {}
@@ -74,6 +85,8 @@ def process_g_file(filepath):
                 relative_pos = end_pos - start_pos
                 if not G.has_edge(end_id, start_id) or not np.array_equal(-relative_pos, G[end_id][start_id]['weight']):
                     G.add_edge(start_id, end_id, weight=relative_pos)
+    
+    # Ensure edges point upward (remove downward edges)
     for (u, v, w) in list(G.edges(data='weight')):
         if w[2] < 0:
             G.remove_edge(u, v)
@@ -83,6 +96,7 @@ def process_g_file(filepath):
 
 
 def process_all_g_files(directory):
+    """Process all .g files in a directory and return graphs and positions."""
     all_graphs = []
     all_positions = []
     for filename in os.listdir(directory):
@@ -93,19 +107,17 @@ def process_all_g_files(directory):
             all_positions.append(positions)
     return all_graphs, all_positions
 
-def convert_to_pyg_data(graph):
-    # Using a constant feature (1) for all nodes
-    node_features = torch.ones((graph.number_of_nodes(), 1))  # Assuming all nodes have a feature '1'
 
-    # Convert edge indices and edge attributes
+def convert_to_pyg_data(graph):
+    """Convert a NetworkX graph to PyTorch Geometric Data format."""
+    node_features = torch.ones((graph.number_of_nodes(), 1))
     edge_index = torch.tensor(list(graph.edges), dtype=torch.long).t().contiguous()
     edge_attr = torch.tensor([graph[u][v]['weight'] for u, v in graph.edges()], dtype=torch.float)
-
-    # Node labels
-    #y = torch.tensor([data for _, data in graph.nodes(data='label')], dtype=torch.float)
-
     return Data(x=node_features, edge_index=edge_index, edge_attr=edge_attr, y=0)
+
+
 def correct_graph_edge_indices(graphs):
+    """Correct edge indices in graphs (shift by -1 if needed)."""
     for graph in graphs:
         corrected_edges_with_attrs = []
 
@@ -119,3 +131,4 @@ def correct_graph_edge_indices(graphs):
         graph.clear_edges()
         for u, v, attrs in corrected_edges_with_attrs:
             graph.add_edge(u, v, **attrs)
+
